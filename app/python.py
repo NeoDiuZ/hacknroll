@@ -15,7 +15,7 @@ KEY_MAPPING = {
 }
 
 # Track connected clients
-clients = set()
+clients = set()x
 
 async def handle_client(websocket):
     try:
