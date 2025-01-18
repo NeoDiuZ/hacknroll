@@ -1,21 +1,44 @@
 'use client'
-import React, { useState, useEffect } from 'react';
-import { Wifi, WifiOff, Heart } from 'lucide-react';
+import React, { useState, useEffect, useRef } from 'react';
+import { Wifi, WifiOff, Zap, Heart } from 'lucide-react';
 import { Press_Start_2P } from 'next/font/google';
-import VideoStream from '../components/VideoStream';
 
-const pressStart2P = Press_Start_2P({
-  weight: '400',
-  subsets: ['latin'],
-});
+const ps2p = Press_Start_2P({ subsets: ['latin'], weight: '400' });
 
-const BattlebotController = () => {
+const Stream = () => {
   const [activeKeys, setActiveKeys] = useState(new Set());
   const [lastCommand, setLastCommand] = useState('Ready!');
   const [isConnected, setIsConnected] = useState(false);
   const [health, setHealth] = useState(3);
   const [gameState, setGameState] = useState('startup');
   const [startupComplete, setStartupComplete] = useState(false);
+  const wsRef = useRef(null);
+
+  // Initialize WebSocket connection
+  useEffect(() => {
+    wsRef.current = new WebSocket('ws://localhost:8765');
+
+    wsRef.current.onopen = () => {
+      console.log('WebSocket Connected');
+      setIsConnected(true);
+    };
+
+    wsRef.current.onclose = () => {
+      console.log('WebSocket Disconnected');
+      setIsConnected(false);
+    };
+
+    wsRef.current.onerror = (error) => {
+      console.error('WebSocket Error:', error);
+      setIsConnected(false);
+    };
+
+    return () => {
+      if (wsRef.current) {
+        wsRef.current.close();
+      }
+    };
+  }, []);
 
   // Startup sequence simulation
   useEffect(() => {
@@ -28,14 +51,12 @@ const BattlebotController = () => {
   useEffect(() => {
     if (startupComplete && gameState === 'disconnected') {
       setTimeout(() => {
-        setIsConnected(true);
         setGameState('connected');
         setTimeout(() => setGameState('playing'), 1000);
       }, 2000);
     }
   }, [startupComplete, gameState]);
 
-  // Health and game state management
   const handleDamage = () => {
     if (gameState === 'playing') {
       const newHealth = health - 1;
@@ -52,7 +73,13 @@ const BattlebotController = () => {
     setGameState('playing');
   };
 
-  // Key handling
+  const sendCommand = (command) => {
+    if (wsRef.current && wsRef.current.readyState === WebSocket.OPEN) {
+      wsRef.current.send(command);
+      setLastCommand(command);
+    }
+  };
+
   const handleKeyAction = (key, isKeyDown) => {
     if (gameState !== 'playing') return;
 
@@ -79,7 +106,7 @@ const BattlebotController = () => {
     };
 
     if (isKeyDown && commands[key]) {
-      setLastCommand(commands[key]);
+      sendCommand(commands[key]);
       if (key === ' ') {
         handleDamage();
       }
@@ -105,31 +132,20 @@ const BattlebotController = () => {
     };
   }, [gameState, health]);
 
-  const handleVideoConnectionChange = (connected) => {
-    setIsConnected(connected);
-    if (connected && gameState === 'disconnected') {
-      setGameState('connected');
-      setTimeout(() => setGameState('playing'), 1000);
-    } else if (!connected && gameState === 'playing') {
-      setGameState('disconnected');
-    }
-  };
-
+  // Rest of your component code remains the same...
   const buttonClass = (key) => {
-    return `rounded-xl flex items-center justify-center text-3xl font-bold transition-all duration-150 
-      ${pressStart2P.className}
+    return `rounded-xl flex items-center justify-center text-xl transition-all duration-150 ${ps2p.className}
       ${activeKeys.has(key) 
         ? 'bg-yellow-400 text-purple-900 transform scale-95 shadow-inner' 
         : 'bg-gradient-to-br from-purple-600 to-purple-700 text-yellow-300 hover:from-purple-500 hover:to-purple-600 shadow-lg'
       } border-2 border-purple-400 backdrop-blur-sm ${gameState !== 'playing' ? 'opacity-50 cursor-not-allowed' : ''}`;
   };
 
-  // State overlays
   const renderStateOverlay = () => {
     switch (gameState) {
       case 'startup':
         return (
-          <div className="absolute inset-0 bg-black z-50 flex items-center justify-center">
+          <div className={`absolute inset-0 bg-black z-50 flex items-center justify-center ${ps2p.className}`}>
             <div className="text-center space-y-4">
               <h1 className="text-6xl font-bold text-yellow-300 animate-pulse">
                 BATTLEBOT SYSTEM
@@ -145,7 +161,7 @@ const BattlebotController = () => {
         );
       case 'disconnected':
         return (
-          <div className="absolute inset-0 bg-red-900/30 z-40 flex items-center justify-center backdrop-blur-sm">
+          <div className={`absolute inset-0 bg-red-900/30 z-40 flex items-center justify-center backdrop-blur-sm ${ps2p.className}`}>
             <div className="text-center space-y-4 animate-bounce">
               <WifiOff size={64} className="text-red-400 mx-auto" />
               <div className="text-2xl text-red-400">NO ROBOT CONNECTED</div>
@@ -154,7 +170,7 @@ const BattlebotController = () => {
         );
       case 'connected':
         return (
-          <div className="absolute inset-0 bg-green-900/30 z-40 flex items-center justify-center backdrop-blur-sm">
+          <div className={`absolute inset-0 bg-green-900/30 z-40 flex items-center justify-center backdrop-blur-sm ${ps2p.className}`}>
             <div className="text-center space-y-4">
               <Wifi size={64} className="text-green-400 mx-auto animate-ping" />
               <div className="text-2xl text-green-400">ROBOT CONNECTED</div>
@@ -163,7 +179,7 @@ const BattlebotController = () => {
         );
       case 'dead':
         return (
-          <div className="absolute inset-0 bg-red-900/50 z-40 flex items-center justify-center backdrop-blur-sm animate-[opacity_1s_ease-in]">
+          <div className={`absolute inset-0 bg-red-900/50 z-40 flex items-center justify-center backdrop-blur-sm animate-[opacity_1s_ease-in] ${ps2p.className}`}>
             <div className="text-center space-y-4">
               <h2 className="text-6xl font-bold text-red-500 animate-bounce">DESTROYED</h2>
               <p className="text-2xl text-yellow-300">Restarting in 5 seconds...</p>
@@ -176,10 +192,15 @@ const BattlebotController = () => {
   };
 
   return (
-    <div className="relative w-screen h-screen overflow-hidden bg-black">
-      {/* Video feed */}
+    <div className={`relative w-screen h-screen overflow-hidden bg-black ${ps2p.className}`}>
+      {/* Full screen video feed */}
       <div className="absolute inset-0 z-0">
-        <VideoStream onConnectionChange={handleVideoConnectionChange} />
+        <iframe
+          src="http://192.168.36.97/stream"
+          className="w-full h-full border-none"
+          frameBorder="0"
+          allowFullScreen
+        />
         {gameState === 'dead' && (
           <div className="absolute inset-0 bg-red-900/50 animate-pulse" />
         )}
@@ -192,7 +213,7 @@ const BattlebotController = () => {
         {/* Top HUD */}
         <div className="absolute top-0 left-0 right-0 p-4 flex justify-between items-center bg-gradient-to-b from-black/70 to-transparent">
           <div className="flex items-center gap-4">
-            <h1 className={`text-4xl font-bold text-yellow-300 ${pressStart2P.className}`}>
+            <h1 className="text-3xl font-bold text-yellow-300">
               BATTLEBOT
             </h1>
             <div className="flex items-center gap-2 bg-purple-900/60 px-4 py-2 rounded-lg">
@@ -201,7 +222,7 @@ const BattlebotController = () => {
               ) : (
                 <WifiOff className="text-red-400" size={20} />
               )}
-              <span className={`text-yellow-300 text-sm ${pressStart2P.className}`}>
+              <span className="text-yellow-300 text-sm">
                 {lastCommand}
               </span>
             </div>
@@ -228,32 +249,29 @@ const BattlebotController = () => {
           <div className="container mx-auto">
             {/* WASD Controls */}
             <div className="flex justify-between items-end">
-              <div className="grid grid-cols-3 gap-4 w-96">
-                {/* Top row */}
+              <div className="grid grid-cols-3 gap-4 w-64">
                 <div></div>
-                <button className={`${buttonClass('w')} h-32 w-32`}>
-                  <span className="text-4xl font-bold">W</span>
+                <button className={`${buttonClass('w')} h-24 w-24`}>
+                  <span className="text-3xl">W</span>
                 </button>
                 <div></div>
 
-                {/* Middle row */}
-                <button className={`${buttonClass('a')} h-32 w-32`}>
-                  <span className="text-4xl font-bold">A</span>
+                <button className={`${buttonClass('a')} h-24 w-24`}>
+                  <span className="text-3xl">A</span>
                 </button>
-                <button className={`${buttonClass('s')} h-32 w-32`}>
-                  <span className="text-4xl font-bold">S</span>
+                <button className={`${buttonClass('s')} h-24 w-24`}>
+                  <span className="text-3xl">S</span>
                 </button>
-                <button className={`${buttonClass('d')} h-32 w-32`}>
-                  <span className="text-4xl font-bold">D</span>
+                <button className={`${buttonClass('d')} h-24 w-24`}>
+                  <span className="text-3xl">D</span>
                 </button>
               </div>
 
-              {/* Attack button */}
               <button 
                 className={`${buttonClass(' ')} 
                   bg-gradient-to-br from-red-600 to-red-700 
                   hover:from-red-500 hover:to-red-600
-                  w-96 h-40 text-7xl font-bold
+                  w-[40rem] h-28 text-5xl
                 `}
               >
                 ATTACK
@@ -266,4 +284,4 @@ const BattlebotController = () => {
   );
 };
 
-export default BattlebotController;
+export default Stream;
